@@ -2,11 +2,7 @@
 streamlit>=1.30.0
 plotly>=5.18.0
 pandas>=2.1.0
-sqlalchemy>=2.0.0
-psycopg2-binary>=2.9.9
-
-# ── Data Loading Script ──
-# (pandas, sqlalchemy, psycopg2-binary listed above)
+statsmodels>=0.14.0
 
 # ── Exploratory Analysis Notebook ──
 numpy>=1.26.0

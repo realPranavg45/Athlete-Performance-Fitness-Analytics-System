@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from sqlalchemy import create_engine
+import os
 
 # ── Config ──────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Athlete Performance Dashboard", page_icon="🏆", layout="wide")
@@ -152,17 +152,15 @@ def recommendation(title, body):
     </div>""", unsafe_allow_html=True)
 
 
-# ── Database ────────────────────────────────────────────────────────────────────
-@st.cache_resource
-def get_engine():
-    return create_engine('postgresql://postgres:Pranav2004@localhost:5522/Athlete')
-
-engine = get_engine()
-
+# ── Data Loading ────────────────────────────────────────────────────────────────
 @st.cache_data
-def q(query):
-    with engine.connect() as conn:
-        return pd.read_sql(query, conn)
+def load_data():
+    # Use relative path for deployment compatibility
+    csv_path = os.path.join("datasets", "cleaned_athlete_data.csv")
+    df = pd.read_csv(csv_path)
+    return df
+
+df_master = load_data()
 
 
 # ── Sidebar ─────────────────────────────────────────────────────────────────────
@@ -177,13 +175,13 @@ with st.sidebar:
 
     # Filter Section: Activity
     st.markdown("<p class='filter-group-label'>Activity Filter</p>", unsafe_allow_html=True)
-    all_workouts = q("SELECT DISTINCT workout_type FROM athlete_training")['workout_type'].tolist()
+    all_workouts = sorted(df_master['workout_type'].unique().tolist())
     selected_workouts = st.multiselect("Select Activities", all_workouts, default=all_workouts, label_visibility="collapsed")
 
     # Filter Section: Demographics
     st.markdown("<p class='filter-group-label'>Demographic Filters</p>", unsafe_allow_html=True)
     selected_gender = st.selectbox("Gender", ["All", "Male", "Female"], label_visibility="collapsed")
-    all_ages = sorted(q("SELECT DISTINCT age_group FROM athlete_training")['age_group'].tolist())
+    all_ages = sorted(df_master['age_group'].unique().tolist())
     selected_age = st.multiselect("Age Cohort", all_ages, default=all_ages, label_visibility="collapsed")
 
     # Live Summary
@@ -209,18 +207,18 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     st.markdown("---")
-    st.caption("⚡ Connected to PostgreSQL")
-    st.caption("Database: Athlete · Port: 5522")
+    st.caption("🚀 Optimized for Cloud Deployment")
+    st.caption("Data Source: Performance CSV Repository")
 
 
 # ── Filter Logic ────────────────────────────────────────────────────────────────
-def quote_list(items):
-    return ','.join("'" + str(i) + "'" for i in items)
+df_filtered = df_master[
+    (df_master['workout_type'].isin(selected_workouts)) &
+    (df_master['age_group'].isin(selected_age))
+]
 
-wc = "WHERE workout_type IN (" + quote_list(selected_workouts) + ")"
-wc += " AND age_group IN (" + quote_list(selected_age) + ")"
 if selected_gender != "All":
-    wc += " AND gender = '" + selected_gender + "'"
+    df_filtered = df_filtered[df_filtered['gender'] == selected_gender]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -233,27 +231,27 @@ st.markdown("<p class='section-desc'>Real-time analytical reporting on training 
 # ═══════════════════════════════════════════════════════════════════════════════
 # LEVEL 1 — KPI SCORECARD
 # ═══════════════════════════════════════════════════════════════════════════════
-kpis = q(f"""
-    SELECT COUNT(*) as n, AVG(calories_burned) as cal, AVG(bmi) as bmi,
-           AVG(workout_intensity) as wi, AVG(max_bpm) as bpm, AVG(fat_percentage) as fat
-    FROM athlete_training {wc}
-""")
+n_count = len(df_filtered)
+avg_cal = df_filtered['calories_burned'].mean() if n_count > 0 else 0
+avg_bmi = df_filtered['bmi'].mean() if n_count > 0 else 0
+avg_wi = df_filtered['workout_intensity'].mean() if n_count > 0 else 0
+avg_bpm = df_filtered['max_bpm'].mean() if n_count > 0 else 0
+avg_fat = df_filtered['fat_percentage'].mean() if n_count > 0 else 0
 
 k1, k2, k3, k4, k5, k6 = st.columns(6)
-k1.metric("Total Participants", f"{kpis['n'][0]:,}")
-k2.metric("Avg Calorie Burn", f"{kpis['cal'][0]:.0f} kcal")
-k3.metric("Body Mass Index", f"{kpis['bmi'][0]:.1f}")
-k4.metric("Training Intensity", f"{kpis['wi'][0]:.0%}")
-k5.metric("Peak Heart Rate", f"{kpis['bpm'][0]:.0f} bpm")
-k6.metric("Body Fat Ratio", f"{kpis['fat'][0]:.1f}%")
+k1.metric("Total Participants", f"{n_count:,}")
+k2.metric("Avg Calorie Burn", f"{avg_cal:.0f} kcal")
+k3.metric("Body Mass Index", f"{avg_bmi:.1f}")
+k4.metric("Training Intensity", f"{avg_wi:.0%}")
+k5.metric("Peak Heart Rate", f"{avg_bpm:.0f} bpm")
+k6.metric("Body Fat Ratio", f"{avg_fat:.1f}%")
 
 # ── KPI Insight ──
-bmi_val = kpis['bmi'][0]
-bmi_status = "within the healthy range (18.5–24.9)" if 18.5 <= bmi_val <= 24.9 else "outside the healthy range — worth flagging for targeted programs"
+bmi_status = "within the healthy range (18.5–24.9)" if 18.5 <= avg_bmi <= 24.9 else "outside the healthy range — worth flagging for targeted programs"
 insight(
     "Executive Health Snapshot",
-    f"Across <b>{kpis['n'][0]:,}</b> participants, the mean BMI of <b>{bmi_val:.1f}</b> is {bmi_status}. "
-    f"On average, each training session burns <b>{kpis['cal'][0]:.0f} kcal</b> at a training intensity of <b>{kpis['wi'][0]:.0%}</b>."
+    f"Across <b>{n_count:,}</b> participants, the mean BMI of <b>{avg_bmi:.1f}</b> is {bmi_status}. "
+    f"On average, each training session burns <b>{avg_cal:.0f} kcal</b> at a training intensity of <b>{avg_wi:.0%}</b>."
 )
 
 
@@ -265,7 +263,9 @@ st.markdown("<p class='section-label'>Training Intensity Overview</p>", unsafe_a
 st.markdown("<p class='section-title'>Where are the highest-performing training segments?</p>", unsafe_allow_html=True)
 st.markdown("<p class='section-desc'>This matrix maps average training intensity across activity categories and age cohorts, highlighting engagement hotspots and underperforming segments.</p>", unsafe_allow_html=True)
 
-df_heat = q(f"SELECT age_group, workout_type, AVG(workout_intensity) as intensity FROM athlete_training {wc} GROUP BY 1, 2")
+df_heat = df_filtered.groupby(['age_group', 'workout_type'])['workout_intensity'].mean().reset_index()
+df_heat.rename(columns={'workout_intensity': 'intensity'}, inplace=True)
+
 fig_heat = px.density_heatmap(
     df_heat, x='age_group', y='workout_type', z='intensity', histfunc="avg",
     color_continuous_scale='Viridis', text_auto='.2f',
@@ -308,7 +308,7 @@ st.markdown("<p class='section-desc'>Breakdown of training preferences, health-r
 p1, p2, p3 = st.columns([1, 1, 1], gap="large")
 
 with p1:
-    df_pop = q(f"SELECT workout_type, COUNT(*) as n FROM athlete_training {wc} GROUP BY 1 ORDER BY n DESC")
+    df_pop = df_filtered.groupby('workout_type').size().reset_index(name='n').sort_values('n', ascending=False)
     fig_pop = px.pie(df_pop, values='n', names='workout_type', hole=0.55)
     fig_pop.update_layout(
         title=dict(text="Training Activity Share", font=dict(size=15)),
@@ -318,7 +318,7 @@ with p1:
     st.plotly_chart(fig_pop, use_container_width=True)
 
 with p2:
-    df_sun = q(f"SELECT age_group, bmi_category, COUNT(*) as n FROM athlete_training {wc} GROUP BY 1, 2")
+    df_sun = df_filtered.groupby(['age_group', 'bmi_category']).size().reset_index(name='n')
     fig_sun = px.sunburst(df_sun, path=['age_group', 'bmi_category'], values='n',
                           color_discrete_sequence=px.colors.qualitative.Pastel)
     fig_sun.update_layout(
@@ -328,7 +328,13 @@ with p2:
     st.plotly_chart(fig_sun, use_container_width=True)
 
 with p3:
-    df_hr = q(f"SELECT workout_type, AVG(resting_bpm) as rest, AVG(avg_bpm) as train, AVG(max_bpm) as peak FROM athlete_training {wc} GROUP BY 1")
+    df_hr = df_filtered.groupby('workout_type').agg({
+        'resting_bpm': 'mean',
+        'avg_bpm': 'mean',
+        'max_bpm': 'mean'
+    }).reset_index()
+    df_hr.columns = ['workout_type', 'rest', 'train', 'peak']
+    
     df_hr_m = df_hr.melt(id_vars='workout_type', var_name='Zone', value_name='BPM')
     fig_radar = px.line_polar(df_hr_m, r='BPM', theta='workout_type', color='Zone', line_close=True)
     fig_radar.update_layout(
@@ -378,7 +384,11 @@ with t_perf:
     left, right = st.columns(2, gap="large")
 
     with left:
-        df_eff = q(f"SELECT workout_type, AVG(calories_burned / NULLIF(session_duration_hours, 0)) as eff FROM athlete_training {wc} GROUP BY 1 ORDER BY eff DESC")
+        # Calculate efficiency: calories_burned / session_duration_hours
+        df_eff_calc = df_filtered.copy()
+        df_eff_calc['eff'] = df_eff_calc['calories_burned'] / df_eff_calc['session_duration_hours'].replace(0, pd.NA)
+        df_eff = df_eff_calc.groupby('workout_type')['eff'].mean().reset_index().sort_values('eff', ascending=False)
+        
         fig_eff = px.bar(df_eff, x='eff', y='workout_type', orientation='h',
                          color='eff', color_continuous_scale='Blues',
                          labels={'eff': 'Calories Burned per Hour', 'workout_type': 'Activity'})
@@ -389,8 +399,7 @@ with t_perf:
         st.plotly_chart(fig_eff, use_container_width=True)
 
     with right:
-        df_sc = q(f"SELECT workout_intensity, calories_burned, workout_type FROM athlete_training {wc}")
-        fig_sc = px.scatter(df_sc, x='workout_intensity', y='calories_burned', color='workout_type',
+        fig_sc = px.scatter(df_filtered, x='workout_intensity', y='calories_burned', color='workout_type',
                             labels={'workout_intensity': 'Training Intensity (Ratio)', 'calories_burned': 'Calories Burned (kcal)', 'workout_type': 'Activity'})
         fig_sc.update_layout(
             title=dict(text="Does Higher Intensity Yield More Calorie Burn?", font=dict(size=15)),
@@ -423,8 +432,7 @@ with t_body:
     left2, right2 = st.columns(2, gap="large")
 
     with left2:
-        df_bf = q(f"SELECT bmi, fat_percentage, gender FROM athlete_training {wc}")
-        fig_bf = px.scatter(df_bf, x='bmi', y='fat_percentage', color='gender', trendline="ols",
+        fig_bf = px.scatter(df_filtered, x='bmi', y='fat_percentage', color='gender', trendline="ols",
                             color_discrete_map={'Male': '#3b82f6', 'Female': '#ec4899'},
                             labels={'bmi': 'Body Mass Index', 'fat_percentage': 'Body Fat Percentage (%)', 'gender': 'Gender'})
         fig_bf.update_layout(
@@ -435,10 +443,9 @@ with t_body:
         st.plotly_chart(fig_bf, use_container_width=True)
 
     with right2:
-        df_hrd = q(f"SELECT avg_bpm, max_bpm FROM athlete_training {wc}")
         fig_h = go.Figure()
-        fig_h.add_trace(go.Histogram(x=df_hrd['avg_bpm'], name='Training Heart Rate', marker_color='#60a5fa', opacity=0.65))
-        fig_h.add_trace(go.Histogram(x=df_hrd['max_bpm'], name='Peak Heart Rate', marker_color='#f87171', opacity=0.65))
+        fig_h.add_trace(go.Histogram(x=df_filtered['avg_bpm'], name='Training Heart Rate', marker_color='#60a5fa', opacity=0.65))
+        fig_h.add_trace(go.Histogram(x=df_filtered['max_bpm'], name='Peak Heart Rate', marker_color='#f87171', opacity=0.65))
         fig_h.update_layout(
             barmode='overlay',
             title=dict(text="Training vs. Peak Heart Rate Distribution", font=dict(size=15)),
@@ -449,8 +456,8 @@ with t_body:
         st.plotly_chart(fig_h, use_container_width=True)
 
     # ── Body Metrics Insights ──
-    if not df_bf.empty:
-        corr = df_bf['bmi'].corr(df_bf['fat_percentage'])
+    if not df_filtered.empty:
+        corr = df_filtered['bmi'].corr(df_filtered['fat_percentage'])
         strength = "strong" if abs(corr) > 0.7 else "moderate" if abs(corr) > 0.4 else "weak"
         insight(
             "Body Composition Correlation Strength",
@@ -459,8 +466,7 @@ with t_body:
             f"For precise body-composition tracking, direct fat measurement remains essential."
         )
 
-    if not df_hrd.empty:
-        avg_spread = df_hrd['max_bpm'].mean() - df_hrd['avg_bpm'].mean()
+        avg_spread = df_filtered['max_bpm'].mean() - df_filtered['avg_bpm'].mean()
         recommendation(
             "Cardiovascular Training Headroom",
             f"The average gap between training BPM and max BPM is <b>{avg_spread:.0f} BPM</b>. "
@@ -470,14 +476,13 @@ with t_body:
 # ── Tab 3: Data Explorer ────────────────────────────────────────────────────────
 with t_raw:
     st.markdown("<div class='spacer-sm'></div>", unsafe_allow_html=True)
-    df_full = q(f"SELECT * FROM athlete_training {wc}")
-    st.dataframe(df_full, use_container_width=True, height=420)
+    st.dataframe(df_filtered, use_container_width=True, height=420)
 
     st.markdown("")
-    st.download_button("📥 Export Filtered Dataset", df_full.to_csv(index=False), "athlete_export.csv", "text/csv")
+    st.download_button("📥 Export Filtered Dataset", df_filtered.to_csv(index=False), "athlete_export.csv", "text/csv")
 
 
 # ── Footer ──────────────────────────────────────────────────────────────────────
 st.markdown("<div class='spacer'></div>", unsafe_allow_html=True)
 st.markdown("---")
-st.caption("Athlete Performance Dashboard v4.0 · PostgreSQL · Streamlit · Plotly")
+st.caption("Athlete Performance Dashboard v5.0 · Cloud-Native · Streamlit · Plotly")
