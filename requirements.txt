@@ -1,0 +1,15 @@
+# ── Dashboard (Streamlit App) ──
+streamlit>=1.30.0
+plotly>=5.18.0
+pandas>=2.1.0
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.9
+
+# ── Data Loading Script ──
+# (pandas, sqlalchemy, psycopg2-binary listed above)
+
+# ── Exploratory Analysis Notebook ──
+numpy>=1.26.0
+matplotlib>=3.8.0
+seaborn>=0.13.0
+jupyter>=1.0.0
