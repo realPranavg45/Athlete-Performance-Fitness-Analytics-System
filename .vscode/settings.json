@@ -1,0 +1,4 @@
+{
+    "pyrefly.enableTypeChecking": false,
+    "pyrefly.enableLanguageServer": false
+}

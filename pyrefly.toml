@@ -1,0 +1,12 @@
+# Pyrefly Configuration
+# Suppresses false-positive errors from embedded CSS/HTML in Streamlit's st.markdown()
+
+[tool.pyrefly]
+project_excludes = [
+    "**/__pyrefly_virtual__/**",
+    "**/inmemory/**",
+]
+
+# Disable strict mode for this project since it contains
+# embedded HTML/CSS strings that confuse the parser
+strict = false
